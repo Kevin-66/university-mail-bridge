@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional local at-rest encryption for the bridge's data/ directory.
+# Local at-rest encryption for the bridge's data/ directory (standard setup).
 #
 # Encrypts EVERYTHING the bridge keeps on disk — the OAuth token cache, the
 # TLS private key and the config — with gocryptfs. While locked, only
