@@ -1,0 +1,8 @@
+# Secrets and runtime state — never commit these.
+data/certs/*.pem
+data/certs/*.key
+data/tokens.cache
+data/*.cache
+
+# If the proxy ever writes tokens back into the config, keep them out of git.
+# (Review `git diff` before committing emailproxy.config.)

@@ -1,0 +1,37 @@
+# University Mail Bridge on a VPS.
+#
+# Publishes IMAP (993) and SMTP (465) on the host so a cloud client can reach
+# them over the internet. TLS for the client hop uses the certificate you place
+# in data/certs/ (see README); the proxy->Microsoft hop is always encrypted
+# regardless.
+services:
+  bridge:
+    build: .
+    image: university-mail-bridge:latest
+    container_name: university-mail-bridge
+    restart: unless-stopped
+
+    # Published on all interfaces because a *cloud* client (Readdle's servers)
+    # must reach it. The bridge password gates access; keep it long and random.
+    ports:
+      - "993:993"   # IMAP over implicit TLS  (public)
+      - "465:465"   # SMTP over implicit TLS  (public)
+      # OAuth redirect catcher, used only during (re)authorization. Bound to
+      # the VPS loopback so it is NOT public: reach it with an SSH tunnel
+      #   ssh -L 8080:localhost:8080 you@your-vps
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      # Everything lives here: config, encrypted token cache, and the TLS
+      # certs (in data/certs/). Persisted across restarts/upgrades.
+      - ./data:/data
+
+    # Minor hardening.
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

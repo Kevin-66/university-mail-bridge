@@ -1,0 +1,2 @@
+Put your TLS certificate here as fullchain.pem and privkey.pem.
+These files are git-ignored. See the README ("TLS certificate").
