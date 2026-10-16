@@ -4,5 +4,9 @@ data/certs/*.key
 data/tokens.cache
 data/*.cache
 
+# gocryptfs at-rest encryption (secure-data.sh): ciphertext + any import stash.
+data.enc/
+data.preinit.*/
+
 # If the proxy ever writes tokens back into the config, keep them out of git.
 # (Review `git diff` before committing emailproxy.config.)

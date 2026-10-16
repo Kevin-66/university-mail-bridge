@@ -127,12 +127,47 @@ Add each account as a **manual IMAP** account:
 - This endpoint, given a valid **address + bridge password**, grants access to
   that mailbox. Use a long, random bridge password per account.
 - The saved token is **encrypted at rest** with that password, which is never
-  stored. A leak of `data/` alone does not expose a mailbox without the password.
+  stored. A leak of `data/tokens.cache` alone does not expose a mailbox without
+  the password.
 - Always serve over real TLS (done via `data/certs/`). Never expose the ports
   without it.
 - Consider `fail2ban` and firewalling on the VPS. Port `8080` is bound to the
   VPS loopback only (reachable via the SSH tunnel), never published publicly.
 - The `9e5f94bc-…` client ID is Thunderbird's public ID — see "Why this exists".
+
+### Encrypting data at rest (optional)
+
+What is already encrypted on disk, and what is not:
+
+| On disk in `data/`     | At rest                                              |
+| ---------------------- | --------------------------------------------------- |
+| `tokens.cache`         | **Encrypted** — per-account bridge password (PBKDF2 → Fernet) |
+| `certs/privkey.pem`    | Plaintext — the service must read it to start       |
+| `emailproxy.config`    | Plaintext — holds no secrets (public client ID only) |
+
+To encrypt **everything** in `data/` (including the TLS key) against disk or
+snapshot theft, use the bundled `secure-data.sh`, which wraps the directory in
+[gocryptfs](https://github.com/rfjakob/gocryptfs). While locked, only ciphertext
+(`data.enc/`) exists on disk; `data/` is an empty mountpoint.
+
+```bash
+sudo apt install gocryptfs
+echo user_allow_other | sudo tee -a /etc/fuse.conf   # needed for the container bind-mount
+
+./secure-data.sh init          # one-time: set a passphrase, import your config/certs
+docker compose up -d
+```
+
+After a VPS reboot the bridge stays **down until you unlock it** — that is the
+price of real at-rest encryption, since the key cannot also live on the same
+disk:
+
+```bash
+./secure-data.sh unlock && docker compose up -d
+```
+
+If you would rather the bridge always come back on its own, skip this and rely
+on the token encryption above plus `chmod 600 data/certs/privkey.pem`.
 
 ---
 
@@ -157,6 +192,7 @@ docker compose up -d
 | `data/certs/`            | Your `fullchain.pem` + `privkey.pem` (git-ignored)  |
 | `authorize.sh`           | One-time per-account sign-in helper                 |
 | `data/authorize.py`      | Trigger used by `authorize.sh`                      |
+| `secure-data.sh`         | Optional gocryptfs at-rest encryption for `data/`   |
 
 Built on [email-oauth2-proxy](https://github.com/simonrob/email-oauth2-proxy)
 by Simon Robinson (Apache-2.0).
