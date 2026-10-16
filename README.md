@@ -41,8 +41,6 @@ password, MFA and sign-in rules still apply exactly as normal.
 - A TLS certificate for that name (a cloud client will reject a self-signed
   one). Let's Encrypt is free — see below.
 - Open inbound ports **993** and **465** on the VPS firewall/security group.
-- `gocryptfs` + FUSE, for the encrypted data store (see step 2):
-  `sudo apt install gocryptfs && echo user_allow_other | sudo tee -a /etc/fuse.conf`
 
 ---
 
@@ -55,20 +53,7 @@ git clone https://github.com/Kevin-66/university-mail-bridge.git
 cd university-mail-bridge
 ```
 
-### 2. Create the encrypted data store
-
-Everything the bridge keeps on disk (token cache, TLS key, config) lives inside
-an encrypted `data/` directory. Create it once; it imports the template files
-and leaves `data/` unlocked for the rest of setup:
-
-```bash
-./secure-data.sh init     # choose a strong passphrase
-```
-
-While locked, only ciphertext (`data.enc/`) exists on disk. See
-[Data at rest](#data-at-rest) for how it behaves across reboots.
-
-### 3. TLS certificate
+### 2. TLS certificate
 
 Obtain a certificate for your domain and copy the two files into `data/certs/`:
 
@@ -85,7 +70,7 @@ The proxy reads the certificate on every new connection, so when you renew it,
 just copy the new files over `data/certs/` — no restart needed. (`data/certs/`
 is git-ignored; your key never leaves the VPS.)
 
-### 4. Configure your accounts
+### 3. Configure your accounts
 
 Edit `data/emailproxy.config`:
 
@@ -96,14 +81,14 @@ Edit `data/emailproxy.config`:
 
 Nothing else needs changing for a standard Microsoft 365 account.
 
-### 5. Start it
+### 4. Start it
 
 ```bash
 docker compose up -d --build
 docker compose logs -f bridge      # watch it come up
 ```
 
-### 6. Authorize each account (one-time)
+### 5. Authorize each account (one-time)
 
 Because the VPS is headless, the browser redirect comes back through an SSH
 tunnel. In one terminal:
@@ -124,25 +109,16 @@ browser (while the tunnel is up), sign in, and the helper confirms your inbox is
 reachable. The token is saved, encrypted with that password, in
 `data/tokens.cache`, and refreshes itself from then on.
 
-### 7. Point your mail client at the bridge
+### 6. Point your mail client at the bridge
 
 Add each account as a **manual IMAP** account:
 
 | Setting            | Value                              |
 | ------------------ | ---------------------------------- |
 | Email / username   | your full address                  |
-| Password           | the **bridge password** from step 6 |
+| Password           | the **bridge password** from step 5 |
 | IMAP server        | `mail.example.com`, port **993**, SSL/TLS |
 | SMTP server        | `mail.example.com`, port **465**, SSL/TLS |
-
-### After a reboot
-
-The encrypted store is not auto-mounted, so the bridge stays down until you
-unlock it:
-
-```bash
-./secure-data.sh unlock && docker compose up -d
-```
 
 ---
 
@@ -158,28 +134,6 @@ unlock it:
 - Consider `fail2ban` and firewalling on the VPS. Port `8080` is bound to the
   VPS loopback only (reachable via the SSH tunnel), never published publicly.
 - The `9e5f94bc-…` client ID is Thunderbird's public ID — see "Why this exists".
-
-<a name="data-at-rest"></a>
-### Data at rest
-
-The entire `data/` directory is encrypted with
-[gocryptfs](https://github.com/rfjakob/gocryptfs) (set up in step 2). While
-locked, only ciphertext (`data.enc/`) exists on disk; `data/` is an empty
-mountpoint. A stolen disk or VPS snapshot therefore reveals nothing without your
-passphrase. Two layers protect the OAuth tokens specifically — the gocryptfs
-volume, and the bridge's own per-account password encryption (PBKDF2 → Fernet).
-
-Manage the store with `secure-data.sh`:
-
-```bash
-./secure-data.sh unlock    # mount data/  (before: docker compose up -d)
-./secure-data.sh lock      # stop the bridge and unmount data/
-./secure-data.sh status
-```
-
-Because real at-rest encryption means the key cannot live on the same disk, the
-store is **not** auto-mounted: after a reboot the bridge stays down until you
-`unlock` it. That is the deliberate trade-off.
 
 ---
 
@@ -204,7 +158,6 @@ docker compose up -d
 | `data/certs/`            | Your `fullchain.pem` + `privkey.pem` (git-ignored)  |
 | `authorize.sh`           | One-time per-account sign-in helper                 |
 | `data/authorize.py`      | Trigger used by `authorize.sh`                      |
-| `secure-data.sh`         | gocryptfs at-rest encryption for `data/` (init/unlock/lock) |
 
 Built on [email-oauth2-proxy](https://github.com/simonrob/email-oauth2-proxy)
 by Simon Robinson (Apache-2.0).
