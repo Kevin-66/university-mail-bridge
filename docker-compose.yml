@@ -13,11 +13,13 @@ services:
     container_name: university-mail-bridge
     restart: unless-stopped
 
-    # Published on all interfaces because a *cloud* client (Readdle's servers)
-    # must reach it. The bridge password gates access; keep it long and random.
+    # Published on all IPv4 interfaces because a *cloud* client (Readdle's
+    # servers) must reach it. The bridge password gates access; keep it long and
+    # random. IPv4 only: on IPv6, Docker relays clients through docker-proxy, so
+    # the bridge (and fail2ban) would see Docker's address instead of theirs.
     ports:
-      - "993:993"   # IMAP over implicit TLS  (public)
-      - "465:465"   # SMTP over implicit TLS  (public)
+      - "0.0.0.0:993:993"   # IMAP over implicit TLS  (public)
+      - "0.0.0.0:465:465"   # SMTP over implicit TLS  (public)
       # OAuth redirect catcher, used only during (re)authorization. Bound to
       # the VPS loopback so it is NOT public: reach it with an SSH tunnel
       #   ssh -L 8080:localhost:8080 you@your-vps

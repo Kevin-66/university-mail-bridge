@@ -158,8 +158,14 @@ Add each account as a **manual IMAP** account:
   the password.
 - Always serve over real TLS (done via `data/certs/`). Never expose the ports
   without it.
-- Consider `fail2ban` and firewalling on the VPS. Port `8080` is bound to the
-  VPS loopback only (reachable via the SSH tunnel), never published publicly.
+- Every failed login is logged with the client's IP, which emailproxy itself
+  doesn't do (added by `loginlog.py`):
+  `Failed login from 203.0.113.5 (IMAP) for account someone@example.com`.
+  Point `fail2ban` at that line to block password guessing. If Docker publishes
+  the ports on IPv6 too, IPv6 clients arrive through docker-proxy and show
+  Docker's own address, so publish them on IPv4 only (`0.0.0.0:993:993`).
+- Port `8080` is bound to the VPS loopback only (reachable via the SSH tunnel),
+  never published publicly.
 - The proxy runs as the unprivileged uid 10001, never as root.
 - The `9e5f94bc-…` client ID is Thunderbird's public ID — see "Why this exists".
 
@@ -188,6 +194,7 @@ To build the image yourself instead, replace the `image:` line in
 | ----------------------------------- | ------------------------------------------------------- |
 | `docker-compose.yml`                | Service, ports, the single `./data` volume              |
 | `Dockerfile`                        | Python + the latest `emailproxy`                        |
+| `loginlog.py`                       | Starts emailproxy; logs failed logins with the client IP |
 | `data/emailproxy.config`            | Servers, accounts, cert paths — **edit this**           |
 | `data/certs/`                       | Your `fullchain.pem` + `privkey.pem` (git-ignored)      |
 | `authorize.sh`                      | One-time per-account sign-in helper                     |

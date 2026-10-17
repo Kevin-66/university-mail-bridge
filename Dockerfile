@@ -14,8 +14,12 @@ RUN pip install --no-cache-dir --upgrade emailproxy
 RUN useradd --system --create-home --uid 10001 bridge
 WORKDIR /data
 
+# emailproxy, plus one log line with the client's IP for every failed login, so
+# fail2ban on the VPS can block password guessing (see loginlog.py and README).
+COPY loginlog.py /app/loginlog.py
+
 USER bridge
-ENTRYPOINT ["python", "-m", "emailproxy"]
+ENTRYPOINT ["python", "/app/loginlog.py"]
 # --local-server-auth lets the service (re)authorize headlessly: when there is
 # no valid token it logs a sign-in URL and briefly serves the OAuth redirect on
 # port 8080 (reach it via an SSH tunnel; see README). Normal token refresh is
