@@ -9,13 +9,13 @@ FROM python:3-slim
 # dependency of emailproxy itself.
 RUN pip install --no-cache-dir --upgrade emailproxy
 
-# /data (config, certs, token cache) is a bind mount from the host. The
-# container starts as root only so the entrypoint can switch to the owner of
-# that folder; the proxy itself never runs as root unless /data is root-owned.
-COPY entrypoint.py /entrypoint.py
+# Run as a non-root user; /data (config + certs + token cache) is a bind mount
+# that this uid must own on the host (see README: chown -R 10001:10001 data).
+RUN useradd --system --create-home --uid 10001 bridge
 WORKDIR /data
 
-ENTRYPOINT ["python", "/entrypoint.py"]
+USER bridge
+ENTRYPOINT ["python", "-m", "emailproxy"]
 # --local-server-auth lets the service (re)authorize headlessly: when there is
 # no valid token it logs a sign-in URL and briefly serves the OAuth redirect on
 # port 8080 (reach it via an SSH tunnel; see README). Normal token refresh is

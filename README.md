@@ -63,7 +63,7 @@ sudo certbot certonly --standalone -d mail.example.com
 
 sudo cp /etc/letsencrypt/live/mail.example.com/fullchain.pem data/certs/fullchain.pem
 sudo cp /etc/letsencrypt/live/mail.example.com/privkey.pem   data/certs/privkey.pem
-sudo chown --reference=data data/certs/*.pem   # same owner as data/, which the proxy runs as
+sudo chown -R 10001:10001 data   # the proxy runs as uid 10001 and must read the key
 ```
 
 (`data/certs/` is git-ignored; your key never leaves the VPS.)
@@ -85,7 +85,7 @@ sudo tee /etc/letsencrypt/renewal-hooks/deploy/university-mail-bridge.sh >/dev/n
 set -e
 BRIDGE=/home/you/university-mail-bridge   # <- where you cloned this repo
 cp "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" "$BRIDGE/data/certs/"
-chown --reference="$BRIDGE/data" "$BRIDGE/data/certs/"*.pem
+chown 10001:10001 "$BRIDGE/data/certs/"*.pem
 docker compose -f "$BRIDGE/docker-compose.yml" kill -s HUP bridge
 HOOK
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/university-mail-bridge.sh
@@ -110,9 +110,8 @@ docker compose up -d
 docker compose logs -f bridge      # watch it come up
 ```
 
-The image is published from this repo (see *Updating*). Inside the container
-the proxy runs as whichever user owns `data/` on the host, so it can read your
-key and save tokens without any permission setup.
+The image is published from this repo (see *Updating*). The proxy runs as
+uid 10001, so `data/` must belong to it (the `chown` in step 2).
 
 ### 5. Authorize each account (one-time)
 
@@ -159,9 +158,7 @@ Add each account as a **manual IMAP** account:
   without it.
 - Consider `fail2ban` and firewalling on the VPS. Port `8080` is bound to the
   VPS loopback only (reachable via the SSH tunnel), never published publicly.
-- The container starts as root only to switch to the owner of `data/`
-  (`entrypoint.py`); the proxy itself runs unprivileged unless you run
-  everything as root on the VPS.
+- The proxy runs as the unprivileged uid 10001, never as root.
 - The `9e5f94bc-…` client ID is Thunderbird's public ID — see "Why this exists".
 
 ---
@@ -189,7 +186,6 @@ To build the image yourself instead, replace the `image:` line in
 | ----------------------------------- | ------------------------------------------------------- |
 | `docker-compose.yml`                | Service, ports, the single `./data` volume              |
 | `Dockerfile`                        | Python + the latest `emailproxy`                        |
-| `entrypoint.py`                     | Runs the proxy as the owner of `data/`                  |
 | `data/emailproxy.config`            | Servers, accounts, cert paths — **edit this**           |
 | `data/certs/`                       | Your `fullchain.pem` + `privkey.pem` (git-ignored)      |
 | `authorize.sh`                      | One-time per-account sign-in helper                     |

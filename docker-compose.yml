@@ -25,8 +25,8 @@ services:
 
     volumes:
       # Everything lives here: config, encrypted token cache, and the TLS
-      # certs (in data/certs/). Persisted across restarts/upgrades. The proxy
-      # runs as whoever owns this folder on the host (see entrypoint.py).
+      # certs (in data/certs/). Persisted across restarts/upgrades. Must be
+      # owned by uid 10001, the user the proxy runs as.
       - ./data:/data
 
     # Minor hardening.
