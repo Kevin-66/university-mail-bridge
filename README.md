@@ -69,11 +69,13 @@ sudo chown -R 10001:10001 data   # the proxy runs as uid 10001 and must read the
 (`data/certs/` is git-ignored; your key never leaves the VPS.)
 
 The proxy loads the certificate when it starts, so after a **renewal** copy the
-new files over and tell it to reload — it restarts its listeners in place and
-keeps the saved sign-ins:
+new files over and restart it. Saved sign-ins live in `data/`, so they survive;
+the bridge is back within seconds. (Don't use `kill -s HUP`: emailproxy re-binds
+its ports before the old sockets close, fails with "Address already in use" and
+stops.)
 
 ```bash
-docker compose kill -s HUP bridge
+docker compose restart bridge
 ```
 
 With certbot this can be automatic. A deploy hook runs after every successful
@@ -86,7 +88,7 @@ set -e
 BRIDGE=/home/you/university-mail-bridge   # <- where you cloned this repo
 cp "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" "$BRIDGE/data/certs/"
 chown 10001:10001 "$BRIDGE/data/certs/"*.pem
-docker compose -f "$BRIDGE/docker-compose.yml" kill -s HUP bridge
+docker compose -f "$BRIDGE/docker-compose.yml" restart bridge
 HOOK
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/university-mail-bridge.sh
 ```
