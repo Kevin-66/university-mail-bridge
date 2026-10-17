@@ -3,19 +3,19 @@
 # a Microsoft 365 mailbox whose tenant blocks the client's own app.
 FROM python:3-slim
 
-# Always install the latest releases at build time. cryptography ships
-# manylinux wheels, so no compiler/GTK is needed. prompt_toolkit is only used
-# for the interactive sign-in; harmless to include.
-RUN pip install --no-cache-dir --upgrade \
-        emailproxy \
-        prompt_toolkit
+# Always the latest release at build time. The published image is rebuilt
+# weekly without layer caching, so this really is current. cryptography ships
+# manylinux wheels, so no compiler is needed; prompt_toolkit comes along as a
+# dependency of emailproxy itself.
+RUN pip install --no-cache-dir --upgrade emailproxy
 
-# Run as a non-root user; /data (config + token cache) is a mounted volume.
-RUN useradd --system --create-home --uid 10001 bridge
+# /data (config, certs, token cache) is a bind mount from the host. The
+# container starts as root only so the entrypoint can switch to the owner of
+# that folder; the proxy itself never runs as root unless /data is root-owned.
+COPY entrypoint.py /entrypoint.py
 WORKDIR /data
 
-USER bridge
-ENTRYPOINT ["python", "-m", "emailproxy"]
+ENTRYPOINT ["python", "/entrypoint.py"]
 # --local-server-auth lets the service (re)authorize headlessly: when there is
 # no valid token it logs a sign-in URL and briefly serves the OAuth redirect on
 # port 8080 (reach it via an SSH tunnel; see README). Normal token refresh is

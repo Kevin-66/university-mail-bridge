@@ -6,8 +6,10 @@
 # regardless.
 services:
   bridge:
-    build: .
-    image: university-mail-bridge:latest
+    # Built from this repo by GitHub Actions: latest emailproxy on the latest
+    # python:3-slim, rebuilt weekly. To build it yourself instead, swap the
+    # image line for  build: .
+    image: ghcr.io/kevin-66/university-mail-bridge:latest
     container_name: university-mail-bridge
     restart: unless-stopped
 
@@ -23,11 +25,11 @@ services:
 
     volumes:
       # Everything lives here: config, encrypted token cache, and the TLS
-      # certs (in data/certs/). Persisted across restarts/upgrades.
+      # certs (in data/certs/). Persisted across restarts/upgrades. The proxy
+      # runs as whoever owns this folder on the host (see entrypoint.py).
       - ./data:/data
 
     # Minor hardening.
-    read_only: false
     security_opt:
       - no-new-privileges:true
     logging:

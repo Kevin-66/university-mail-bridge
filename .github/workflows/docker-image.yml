@@ -1,32 +1,36 @@
-# Builds on every push to main and publishes to GHCR with a date version and latest:
+# Builds the image and publishes it to GHCR as latest plus a date version:
 #   ghcr.io/kevin-66/university-mail-bridge
-# Versions look like 2026.10.18 (a second build that day: 2026.10.18.2) and are also pushed as git tags.
+# Versions look like 2026.10.18 (a second build that day: 2026.10.18.2) and are
+# also pushed as git tags. Runs on every push to main and once a week, without
+# layer caching, so every build really does install the latest emailproxy on
+# the latest python:3-slim.
 name: Docker image
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'   # Mondays, 04:17 UTC
   workflow_dispatch:
 
-# One run at a time, so two pushes on the same day can't claim the same version.
+# One run at a time, so two builds on the same day can't claim the same version.
 concurrency:
   group: docker-image
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  packages: write
+  contents: write   # push the version tag
+  packages: write   # push the image
 
 jobs:
-  version:
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
+
       - id: version
         name: Next date version
         run: |
@@ -37,41 +41,33 @@ jobs:
           done
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  build:
-    needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/kevin-66/university-mail-bridge
           tags: |
-            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
+
       - uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
+          pull: true       # fetch the current python:3-slim
+          no-cache: true   # rerun pip install, so emailproxy is current too
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-  tag:
-    needs: [version, build]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
       - name: Record the version as a git tag
         run: |
-          git tag "${{ needs.version.outputs.version }}" "$GITHUB_SHA"
-          git push origin "refs/tags/${{ needs.version.outputs.version }}"
+          git tag "${{ steps.version.outputs.version }}" "$GITHUB_SHA"
+          git push origin "refs/tags/${{ steps.version.outputs.version }}"

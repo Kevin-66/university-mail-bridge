@@ -63,12 +63,33 @@ sudo certbot certonly --standalone -d mail.example.com
 
 sudo cp /etc/letsencrypt/live/mail.example.com/fullchain.pem data/certs/fullchain.pem
 sudo cp /etc/letsencrypt/live/mail.example.com/privkey.pem   data/certs/privkey.pem
-sudo chown "$USER" data/certs/*.pem
+sudo chown --reference=data data/certs/*.pem   # same owner as data/, which the proxy runs as
 ```
 
-The proxy reads the certificate on every new connection, so when you renew it,
-just copy the new files over `data/certs/` — no restart needed. (`data/certs/`
-is git-ignored; your key never leaves the VPS.)
+(`data/certs/` is git-ignored; your key never leaves the VPS.)
+
+The proxy loads the certificate when it starts, so after a **renewal** copy the
+new files over and tell it to reload — it restarts its listeners in place and
+keeps the saved sign-ins:
+
+```bash
+docker compose kill -s HUP bridge
+```
+
+With certbot this can be automatic. A deploy hook runs after every successful
+renewal:
+
+```bash
+sudo tee /etc/letsencrypt/renewal-hooks/deploy/university-mail-bridge.sh >/dev/null <<'HOOK'
+#!/bin/sh
+set -e
+BRIDGE=/home/you/university-mail-bridge   # <- where you cloned this repo
+cp "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" "$BRIDGE/data/certs/"
+chown --reference="$BRIDGE/data" "$BRIDGE/data/certs/"*.pem
+docker compose -f "$BRIDGE/docker-compose.yml" kill -s HUP bridge
+HOOK
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/university-mail-bridge.sh
+```
 
 ### 3. Configure your accounts
 
@@ -84,9 +105,14 @@ Nothing else needs changing for a standard Microsoft 365 account.
 ### 4. Start it
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f bridge      # watch it come up
 ```
+
+The image is published from this repo (see *Updating*). Inside the container
+the proxy runs as whichever user owns `data/` on the host, so it can read your
+key and save tokens without any permission setup.
 
 ### 5. Authorize each account (one-time)
 
@@ -133,31 +159,42 @@ Add each account as a **manual IMAP** account:
   without it.
 - Consider `fail2ban` and firewalling on the VPS. Port `8080` is bound to the
   VPS loopback only (reachable via the SSH tunnel), never published publicly.
+- The container starts as root only to switch to the owner of `data/`
+  (`entrypoint.py`); the proxy itself runs unprivileged unless you run
+  everything as root on the VPS.
 - The `9e5f94bc-…` client ID is Thunderbird's public ID — see "Why this exists".
 
 ---
 
 ## Updating
 
-Images install the latest `emailproxy` at build time, so updating is a rebuild:
+GitHub Actions builds the image on every push and **once a week**, always with
+the latest `emailproxy` on the latest `python:3-slim`, and publishes it to
+`ghcr.io/kevin-66/university-mail-bridge` as `latest` plus a date version
+(e.g. `2026.10.18`). Updating the VPS is a pull:
 
 ```bash
-docker compose build --pull --no-cache
+docker compose pull
 docker compose up -d
 ```
+
+To build the image yourself instead, replace the `image:` line in
+`docker-compose.yml` with `build: .` and run `docker compose up -d --build`.
 
 ---
 
 ## Files
 
-| Path                     | Purpose                                             |
-| ------------------------ | --------------------------------------------------- |
-| `docker-compose.yml`     | Service, ports, the single `./data` volume          |
-| `Dockerfile`             | Python + `emailproxy` (+ `prompt_toolkit`)          |
-| `data/emailproxy.config` | Servers, accounts, cert paths — **edit this**       |
-| `data/certs/`            | Your `fullchain.pem` + `privkey.pem` (git-ignored)  |
-| `authorize.sh`           | One-time per-account sign-in helper                 |
-| `data/authorize.py`      | Trigger used by `authorize.sh`                      |
+| Path                                | Purpose                                                 |
+| ----------------------------------- | ------------------------------------------------------- |
+| `docker-compose.yml`                | Service, ports, the single `./data` volume              |
+| `Dockerfile`                        | Python + the latest `emailproxy`                        |
+| `entrypoint.py`                     | Runs the proxy as the owner of `data/`                  |
+| `data/emailproxy.config`            | Servers, accounts, cert paths — **edit this**           |
+| `data/certs/`                       | Your `fullchain.pem` + `privkey.pem` (git-ignored)      |
+| `authorize.sh`                      | One-time per-account sign-in helper                     |
+| `data/authorize.py`                 | Trigger used by `authorize.sh`                          |
+| `.github/workflows/docker-image.yml`| Weekly image build and publish to GHCR                  |
 
 Built on [email-oauth2-proxy](https://github.com/simonrob/email-oauth2-proxy)
 by Simon Robinson (Apache-2.0).
