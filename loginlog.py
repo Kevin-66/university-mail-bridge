@@ -42,6 +42,9 @@ _get_oauth2_credentials = emailproxy.OAuth2Helper.get_oauth2_credentials
 
 def get_oauth2_credentials(username, password, *args, **kwargs):
     global _depth
+    # No real login name has a line break. Escape them, so a crafted name can't add a fake
+    # "Failed login from <someone else>" line to the log and get that address blocked.
+    username = username.replace('\r', '\\r').replace('\n', '\\n')
     _depth += 1
     try:
         success, result = _get_oauth2_credentials(username, password, *args, **kwargs)
